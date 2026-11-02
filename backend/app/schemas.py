@@ -56,6 +56,11 @@ class ParticipantRead(BaseModel):
 class SessionCreate(BaseModel):
     study_id: int
     participant_id: str
+    actor_type: str = Field(default="human", pattern="^(human|ai)$")
+    persona: str = "human_participant"
+    persona_parameters: dict[str, Any] = Field(default_factory=dict)
+    model_name: str | None = None
+    run_id: str | None = None
     ui_language: str = "en"
     assigned_version: str = "A"
     status: str = "in_progress"
@@ -68,6 +73,10 @@ class SessionRead(BaseModel):
     session_id: str
     study_id: int
     participant_id: str
+    actor_type: str
+    persona: str
+    model_name: str | None = None
+    run_id: str | None = None
     assigned_version: str
     ui_language: str
     status: str
@@ -113,6 +122,32 @@ class SessionMetrics(BaseModel):
     event_count: int
     event_types: dict[str, int]
     task_metrics: dict[str, TaskMetrics]
+
+
+class SessionResultRead(BaseModel):
+    session_id: str
+    run_id: str | None = None
+    actor_type: str
+    persona: str
+    persona_parameters: dict[str, Any]
+    model_name: str | None = None
+    version: str
+    task_id: str | None = None
+    status: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    duration_seconds: int | None = None
+    event_count: int
+    actions: int
+    retries: int
+    errors: int
+    failed_attempts: int
+    success: bool | None = None
+    cart: list[dict[str, Any]]
+
+
+class SessionComplete(BaseModel):
+    status: str = Field(default="completed", pattern="^(completed|abandoned|failed)$")
 
 
 class HealthResponse(BaseModel):

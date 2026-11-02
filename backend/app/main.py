@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .bookstore import get_bookstore_versions
 from .config import settings
-from .db import Base, SessionLocal, engine, get_db
+from .db import Base, SessionLocal, engine, get_db, migrate_schema
+from .ground_truth import DECOYS, SEEDED_ISSUES, evaluate_seeded_issue
 from .models import Participant, ResearchEvent, Session, Study
 from .schemas import (
     ConsentUpdate,
@@ -20,8 +22,10 @@ from .schemas import (
     ParticipantCreate,
     ParticipantRead,
     ResearchEventBatch,
+    SessionComplete,
     SessionCreate,
     SessionMetrics,
+    SessionResultRead,
     SessionRead,
     StudyCreate,
     StudyRead,
@@ -29,6 +33,9 @@ from .schemas import (
 )
 
 Base.metadata.create_all(bind=engine)
+migrate_schema()
+
+SESSION_NOT_FOUND = "Session not found"
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.add_middleware(
@@ -169,18 +176,29 @@ def list_sessions(db: Session = Depends(get_db)) -> list[SessionRead]:
 
 @app.post("/api/sessions", response_model=SessionRead, tags=["sessions"])
 def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> SessionRead:
+    parity = get_bookstore_versions()["parity_check"]
+    if parity["status"] != "passed":
+        raise HTTPException(status_code=409, detail="Experiment session blocked: bookstore parity validation failed")
+
     study = db.query(Study).filter(Study.id == payload.study_id).first()
     if study is None:
         raise HTTPException(status_code=404, detail="Study not found")
 
     participant = db.query(Participant).filter(Participant.participant_id == payload.participant_id).first()
-    if participant is None:
+    if payload.actor_type == "human" and participant is None:
         raise HTTPException(status_code=404, detail="Participant not found")
+    if payload.actor_type == "ai" and participant is not None:
+        raise HTTPException(status_code=409, detail="AI sessions must not be linked to a human participant")
 
     session = Session(
         session_id=f"S-{uuid.uuid4().hex[:10].upper()}",
         study_id=payload.study_id,
         participant_id=payload.participant_id,
+        actor_type=payload.actor_type,
+        persona=payload.persona,
+        persona_parameters=json.dumps(payload.persona_parameters, separators=(",", ":")),
+        model_name=payload.model_name,
+        run_id=payload.run_id,
         assigned_version=payload.assigned_version,
         ui_language=payload.ui_language,
         status=payload.status,
@@ -199,6 +217,19 @@ def list_sessions_for_participant(participant_id: str, db: Session = Depends(get
     return [SessionRead.model_validate(session) for session in sessions]
 
 
+@app.post("/api/sessions/{session_id}/complete", response_model=SessionRead, tags=["sessions"])
+def complete_session(session_id: str, payload: SessionComplete, db: Session = Depends(get_db)) -> SessionRead:
+    session = db.query(Session).filter(Session.session_id == session_id).first()
+    if session is None:
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND)
+    if session.status != "in_progress":
+        raise HTTPException(status_code=409, detail="Session is already closed")
+    session.status = payload.status
+    db.commit()
+    db.refresh(session)
+    return SessionRead.model_validate(session)
+
+
 @app.post("/api/sessions/{session_id}/events", response_model=EventBatchResult, tags=["events"])
 def ingest_session_events(
     session_id: str,
@@ -207,7 +238,7 @@ def ingest_session_events(
 ) -> EventBatchResult:
     session = db.query(Session).filter(Session.session_id == session_id).first()
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND)
     if session.status != "in_progress":
         raise HTTPException(status_code=409, detail="Session is not accepting events")
 
@@ -251,7 +282,7 @@ def ingest_session_events(
 def get_session_metrics(session_id: str, db: Session = Depends(get_db)) -> SessionMetrics:
     session = db.query(Session).filter(Session.session_id == session_id).first()
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND)
 
     events = (
         db.query(ResearchEvent)
@@ -290,111 +321,102 @@ def get_session_metrics(session_id: str, db: Session = Depends(get_db)) -> Sessi
     )
 
 
-@app.get("/api/bookstore/versions", tags=["bookstore"]) 
-def bookstore_versions() -> dict[str, Any]:
-    products_set_1 = [
-        {
-            "id": "book-1",
-            "title": "The Last Orion",
-            "author": "A. Rowan",
-            "genre": "Sci-Fi",
-            "price": 18.99,
-            "rating": 4.7,
-            "reviews": 142,
-            "in_stock": True,
-            "description": "A lone explorer traverses a collapsing galaxy and uncovers a forgotten star map.",
-            "is_reviewed": True,
-        },
-        {
-            "id": "book-2",
-            "title": "Signal in the Dust",
-            "author": "M. Kline",
-            "genre": "Sci-Fi",
-            "price": 14.5,
-            "rating": 4.2,
-            "reviews": 28,
-            "in_stock": True,
-            "description": "A hidden signal from deep space forces a team to revisit the legacies they left behind.",
-            "is_reviewed": False,
-        },
-    ]
-    products_set_2 = [
-        {
-            "id": "book-11",
-            "title": "Glass Horizon",
-            "author": "L. Mora",
-            "genre": "Science Fiction",
-            "price": 16.0,
-            "rating": 4.8,
-            "reviews": 201,
-            "in_stock": True,
-            "description": "A lone explorer traverses a collapsing galaxy and uncovers a forgotten star map.",
-            "is_reviewed": True,
-        },
-        {
-            "id": "book-12",
-            "title": "Echo of the Future",
-            "author": "J. Vale",
-            "genre": "Science Fiction",
-            "price": 19.95,
-            "rating": 4.1,
-            "reviews": 11,
-            "in_stock": True,
-            "description": "A hidden signal from deep space forces a team to revisit the legacies they left behind.",
-            "is_reviewed": False,
-        },
-    ]
+@app.get("/api/results", response_model=list[SessionResultRead], tags=["results"])
+def get_experiment_results(db: Session = Depends(get_db)) -> list[SessionResultRead]:
+    sessions = db.query(Session).order_by(Session.created_at.desc()).all()
+    return [_build_session_result(session, db) for session in sessions]
 
-    return {
-        "version_a": {
-            "name": "Version A",
-            "products": products_set_1,
-            "feature_flags": {
-                "S1": True,
-                "S2": True,
-                "S3": True,
-                "S4": True,
-                "S5": True,
-                "S6": True,
-                "S7": True,
-                "S8": True,
-                "S9": True,
-                "S10": True,
-            },
-        },
-        "version_b": {
-            "name": "Version B",
-            "products": products_set_2,
-            "feature_flags": {
-                "S1": False,
-                "S2": False,
-                "S3": False,
-                "S4": False,
-                "S5": False,
-                "S6": False,
-                "S7": False,
-                "S8": False,
-                "S9": False,
-                "S10": False,
-            },
-        },
-        "parity_check": {
-            "matched_product_count": 2,
-            "same_actions": True,
-            "same_prices": True,
-            "same_descriptions": True,
-            "message": "A and B differ only in intended UX features."
-        },
+
+def _build_session_result(session: Session, db: Session) -> SessionResultRead:
+    events = (
+        db.query(ResearchEvent)
+        .filter(ResearchEvent.session_id == session.session_id)
+        .order_by(ResearchEvent.occurred_at, ResearchEvent.id)
+        .all()
+    )
+    task_events = [event for event in events if event.task_id]
+    completion = next(
+        (event for event in reversed(task_events) if event.event_type in {"task_completed", "task_failed"}),
+        None,
+    )
+    completion_payload = json.loads(completion.payload or "{}") if completion else {}
+    run_metrics_event = next((event for event in reversed(events) if event.event_type == "run_metrics"), None)
+    run_metrics = json.loads(run_metrics_event.payload or "{}") if run_metrics_event else {}
+    started = events[0].occurred_at if events else session.created_at
+    ended = events[-1].occurred_at if session.status != "in_progress" and events else None
+    duration = max(0, int((ended - started).total_seconds())) if ended else None
+    derived_retries = sum(event.event_type in {"task_failed", "validation_error"} for event in events)
+    derived_errors = sum(event.event_type in {"validation_error", "task_failed"} for event in events)
+    derived_actions = sum(
+        event.event_type in {"search_submitted", "filter_changed", "add_to_cart", "quantity_changed", "checkout_started"}
+        for event in events
+    )
+    return SessionResultRead(
+        session_id=session.session_id,
+        run_id=session.run_id,
+        actor_type=session.actor_type,
+        persona=session.persona,
+        persona_parameters=json.loads(session.persona_parameters or "{}"),
+        model_name=session.model_name,
+        version=session.assigned_version,
+        task_id=task_events[0].task_id if task_events else None,
+        status=session.status,
+        started_at=started,
+        ended_at=ended,
+        duration_seconds=duration,
+        event_count=len(events),
+        actions=run_metrics.get("actions", derived_actions),
+        retries=run_metrics.get("retries", derived_retries),
+        errors=run_metrics.get("errors", derived_errors),
+        failed_attempts=sum(event.event_type == "task_failed" for event in events),
+        success=run_metrics.get("success", completion_payload.get("success")),
+        cart=completion_payload.get("cart", []),
+    )
+
+
+@app.get("/api/sessions/{session_id}/evaluation", tags=["evaluation"])
+def evaluate_session_evidence(session_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    session = db.query(Session).filter(Session.session_id == session_id).first()
+    if session is None:
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND)
+    events = (
+        db.query(ResearchEvent)
+        .filter(ResearchEvent.session_id == session_id)
+        .order_by(ResearchEvent.occurred_at, ResearchEvent.id)
+        .all()
+    )
+    evidence_events = [
+        {"event_type": event.event_type, "payload": json.loads(event.payload or "{}")}
+        for event in events
+    ]
+    outcomes = {
+        issue_id: evaluate_seeded_issue(issue_id, session.assigned_version, evidence_events)
+        for issue_id in SEEDED_ISSUES
     }
+    return {
+        "session_id": session_id,
+        "version": session.assigned_version,
+        "tier": "Tier 1 seeded issues; observational evidence only",
+        "outcomes": outcomes,
+        "decoys": DECOYS,
+    }
+
+
+@app.get("/api/bookstore/versions", tags=["bookstore"])
+def bookstore_versions() -> dict[str, Any]:
+    return get_bookstore_versions()
 
 
 @app.get("/api/stage-check", tags=["meta"]) 
 def stage_check() -> dict[str, Any]:
+    parity = get_bookstore_versions()["parity_check"]
     return {
         "foundation": "complete",
         "bookstore_shell": "complete",
         "human_flow": "complete",
         "event_collection": "complete",
-        "agent_system": "pending",
+        "agent_system": "implemented",
+        "catalogue_parity": parity,
+        "experiment_ready": parity["status"] == "passed",
         "pilot": "pending",
     }

@@ -6,6 +6,8 @@ __pycache__/
 .venv/
 venv/
 .env
+agent/.env
+.pytest_cache/
 
 # Node
 node_modules/
@@ -22,3 +24,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Generated experiment evidence and result exports
+reports/evidence/
+reports/mini_experiment_summary.md
+reports/mini_experiment_results.csv
+reports/mini_experiment_results.json

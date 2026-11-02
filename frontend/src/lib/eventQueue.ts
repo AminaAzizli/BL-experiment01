@@ -18,6 +18,7 @@ const STORAGE_KEY = 'behaviourlens.event-queue.v1'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const MAX_QUEUE_LENGTH = 5000
 let memoryQueue: QueuedResearchEvent[] = []
+const activeFlushes = new Map<string, Promise<number>>()
 
 function readQueue(): QueuedResearchEvent[] {
   try {
@@ -47,8 +48,10 @@ function newEventId(): string {
 }
 
 export function enqueueResearchEvent(sessionId: string, input: ResearchEventInput): string {
+  if (!sessionId.trim() || !input.event_type.trim()) {
+    throw new Error('A session ID and event type are required to enqueue a research event')
+  }
   const eventId = newEventId()
-  if (!sessionId.trim() || !input.event_type.trim()) return eventId
 
   const event: QueuedResearchEvent = {
     session_id: sessionId,
@@ -67,13 +70,24 @@ export function getQueuedResearchEventCount(sessionId?: string): number {
   return sessionId ? queue.filter((event) => event.session_id === sessionId).length : queue.length
 }
 
-export async function flushQueuedResearchEvents(sessionId: string): Promise<number> {
-  if (!sessionId.trim() || typeof window === 'undefined') return 0
+export function flushQueuedResearchEvents(sessionId: string): Promise<number> {
+  if (!sessionId.trim() || typeof window === 'undefined') return Promise.resolve(0)
+  const activeFlush = activeFlushes.get(sessionId)
+  if (activeFlush !== undefined) return activeFlush
 
+  const flushPromise = flushSessionEvents(sessionId).finally(() => activeFlushes.delete(sessionId))
+  activeFlushes.set(sessionId, flushPromise)
+  return flushPromise
+}
+
+async function flushSessionEvents(sessionId: string): Promise<number> {
   let flushedCount = 0
-  const sessionQueue = readQueue().filter((event) => event.session_id === sessionId)
-  for (let offset = 0; offset < sessionQueue.length; offset += 500) {
-    const batch = sessionQueue.slice(offset, offset + 500)
+  while (true) {
+    const batch = readQueue()
+      .filter((event) => event.session_id === sessionId)
+      .slice(0, 500)
+    if (batch.length === 0) break
+
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/sessions/${encodeURIComponent(sessionId)}/events`,

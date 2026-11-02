@@ -63,3 +63,37 @@ def test_event_batch_rejects_unknown_session():
         json={"events": [{"event_id": "evt-missing", "event_type": "click"}]},
     )
     assert response.status_code == 404
+
+
+def test_seeded_issue_evaluation_uses_stored_condition_evidence():
+    study = client.post("/api/studies", json={"name": "Evaluation test"}).json()
+    session = client.post(
+        "/api/sessions",
+        json={
+            "study_id": study["id"],
+            "participant_id": "AI-evaluation-test",
+            "actor_type": "ai",
+            "persona": "neutral_baseline",
+            "assigned_version": "A",
+        },
+    ).json()
+    event_response = client.post(
+        f"/api/sessions/{session['session_id']}/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-eval-filter",
+                    "event_type": "filter_changed",
+                    "task_id": "T1",
+                    "payload": {"filter_label": "Refine"},
+                }
+            ]
+        },
+    )
+    assert event_response.status_code == 200
+
+    evaluation = client.get(f"/api/sessions/{session['session_id']}/evaluation")
+    assert evaluation.status_code == 200
+    result = evaluation.json()
+    assert result["outcomes"]["S1"]["outcome"] == "detected"
+    assert result["outcomes"]["S8"]["outcome"] == "insufficient_evidence"

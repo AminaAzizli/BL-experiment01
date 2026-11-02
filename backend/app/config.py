@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "BehaviourLens"
     environment: str = "development"
-    database_url: str = "sqlite:///./behaviourlens.db"
+    database_url: str = "sqlite:///./behaviourlens_demo.db"
     api_prefix: str = "/api"
 
     model_config = SettingsConfigDict(
