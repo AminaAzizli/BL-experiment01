@@ -25,7 +25,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Generated experiment evidence and result exports
+# Private detailed experiment exports and evidence; aggregate reports in reports/public are trackable
 reports/evidence/
 reports/mini_experiment_summary.md
 reports/mini_experiment_results.csv

@@ -109,6 +109,110 @@ def _persona_summary(persona: str, group: list[dict[str, Any]]) -> str:
     return f"- {persona}: {outcome_text}; {actions_text}; {len(group)} recorded runs."
 
 
+def _public_aggregate(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
+    for session in sessions:
+        condition = (
+            str(session.get("actor_type", "unknown")),
+            str(session.get("version", "unknown")),
+            str(session.get("task_id") or "unknown"),
+            str(session.get("persona", "unknown")),
+            str(session.get("model_name") or "unknown"),
+        )
+        grouped.setdefault(condition, []).append(session)
+
+    rows: list[dict[str, Any]] = []
+    for condition, records in sorted(grouped.items()):
+        actor_type, version, task_id, persona, model_name = condition
+        outcomes = [record["success"] for record in records if record.get("success") is not None]
+        durations = [float(record["duration_seconds"]) for record in records if record.get("duration_seconds") is not None]
+        action_counts = [int(record.get("actions", 0)) for record in records]
+        retries = [int(record.get("retries", 0)) for record in records]
+        errors = [int(record.get("errors", 0)) for record in records]
+        rows.append(
+            {
+                "actor_type": actor_type,
+                "version": version,
+                "task_id": task_id,
+                "persona": persona,
+                "model_name": model_name,
+                "session_count": len(records),
+                "verified_outcomes": len(outcomes),
+                "successes": sum(bool(outcome) for outcome in outcomes),
+                "success_rate": round(sum(bool(outcome) for outcome in outcomes) / len(outcomes), 4) if outcomes else None,
+                "unverified_outcomes": len(records) - len(outcomes),
+                "mean_duration_seconds": round(sum(durations) / len(durations), 2) if durations else None,
+                "mean_actions": round(sum(action_counts) / len(action_counts), 2) if action_counts else None,
+                "mean_retries": round(sum(retries) / len(retries), 2) if retries else None,
+                "mean_errors": round(sum(errors) / len(errors), 2) if errors else None,
+            }
+        )
+    return rows
+
+
+def _write_public_snapshot(sessions: list[dict[str, Any]], output_dir: Path) -> list[Path]:
+    public_dir = output_dir / "public"
+    public_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = public_dir / "mini_experiment_summary.md"
+    csv_path = public_dir / "mini_experiment_results.csv"
+    json_path = public_dir / "mini_experiment_results.json"
+    rows = _public_aggregate(sessions)
+    public_data = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "classification": "preliminary aggregate demonstration data",
+        "research_question": RESEARCH_QUESTION,
+        "sessions_included": len(sessions),
+        "conditions": rows,
+    }
+    json_path.write_text(json.dumps(public_data, indent=2), encoding="utf-8")
+    columns = list(rows[0]) if rows else [
+        "actor_type", "version", "task_id", "persona", "model_name", "session_count",
+        "verified_outcomes", "successes", "success_rate", "unverified_outcomes",
+        "mean_duration_seconds", "mean_actions", "mean_retries", "mean_errors",
+    ]
+    with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    summary = [
+        "# BehaviourLens Mini-Experiment Summary",
+        "",
+        "**Preliminary aggregate demonstration results. These observations are not statistically significant evidence.**",
+        "",
+        "## Research question",
+        RESEARCH_QUESTION,
+        "",
+        "## Experimental setup",
+        "- A and B use the same validated, ordered product catalogue and actions.",
+        "- A includes S1, S3, S7, S8, and S10; B improves those interface details.",
+        "- Completed mini-experiment tasks are T1 product discovery and T5 cart editing.",
+        "- AI outcomes are verified from the rendered cart; unverified attempts are reported separately.",
+        "- Persona summaries are grouped by actor, version, task, persona, and model.",
+        "",
+        "## Aggregate results",
+        f"- Recorded sessions included: {len(sessions)}",
+        "- Each line reports sample counts, verified success rate, and mean behavioral measures for that condition.",
+        "",
+        "## Condition comparisons",
+        *[
+            f"- {row['actor_type']} | {row['version']} | {row['task_id']} | {row['persona']} | {row['model_name']}: "
+            f"{row['successes']}/{row['verified_outcomes']} verified successes; "
+            f"{row['unverified_outcomes']} unverified; mean actions {row['mean_actions']}; "
+            f"mean duration {row['mean_duration_seconds']}s; mean retries {row['mean_retries']}."
+            for row in rows
+        ],
+        "",
+        "## Limitations",
+        "- These are small, local demonstration samples; no statistical-significance claim is made.",
+        "- Behavioral indicators do not establish subjective frustration or usability causality.",
+        "- Aggregates omit session identifiers, run IDs, event payloads, timestamps, screenshots, and model transcripts.",
+        "",
+    ]
+    summary_path.write_text("\n".join(summary), encoding="utf-8")
+    return [summary_path, csv_path, json_path]
+
+
 def write_reports(api_base_url: str, runs: list[dict[str, Any]], output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "mini_experiment_results.json"
@@ -147,6 +251,8 @@ def write_reports(api_base_url: str, runs: list[dict[str, Any]], output_dir: Pat
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+    _write_public_snapshot(comparison_records, output_dir)
 
     verified_invocation = [run["success"] for run in runs if run.get("success") is not None]
     successful = sum(bool(outcome) for outcome in verified_invocation)

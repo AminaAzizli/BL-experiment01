@@ -125,3 +125,11 @@ def test_report_generation_exports_observed_runs_and_human_sessions(monkeypatch)
         assert "low_patience" in summary
         assert "neutral_baseline" in summary
         assert "AI sessions in stored results: 2" in summary
+
+        public_json = Path(directory, "public", "mini_experiment_results.json").read_text(encoding="utf-8")
+        public_csv = Path(directory, "public", "mini_experiment_results.csv").read_text(encoding="utf-8-sig")
+        assert "prior-ai-session" not in public_json
+        assert "human-session" not in public_json
+        assert "event_log" not in public_json
+        assert "session_id" not in public_csv
+        assert "low_patience" in public_json

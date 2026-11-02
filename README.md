@@ -96,7 +96,7 @@ Available personas: `neutral_baseline`, `low_digital_experience`, `low_patience`
 
 ## Results and reports
 
-The frontend results section compares stored human and AI sessions and exports CSV/JSON. AI runs also generate `reports/mini_experiment_summary.md`, `reports/mini_experiment_results.csv`, and `reports/mini_experiment_results.json`; screenshots are stored under `reports/evidence/`. The report labels results preliminary and makes no statistical-significance claim. No synthetic human observations are created.
+The frontend results section compares stored human and AI sessions and exports CSV/JSON. Detailed local AI run exports and screenshots are kept in the ignored `reports/` files and `reports/evidence/`. Aggregate-only, GitHub-visible snapshots are written to `reports/public/mini_experiment_summary.md`, `reports/public/mini_experiment_results.csv`, and `reports/public/mini_experiment_results.json`; they contain condition-level counts and averages, not session IDs, event payloads, timestamps, screenshots, or model transcripts. Reports label results preliminary and make no statistical-significance claim. No synthetic human observations are created.
 
 The backend event API accepts batches of up to 500 events at `POST /api/sessions/{session_id}/events`; retries are idempotent per event ID and session. The browser queue persists pending events in local storage and retries when the connection returns. Payloads contain behavioral data only, not form values or direct identifiers.
 

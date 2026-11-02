@@ -1,0 +1,11 @@
+﻿actor_type,version,task_id,persona,model_name,session_count,verified_outcomes,successes,success_rate,unverified_outcomes,mean_duration_seconds,mean_actions,mean_retries,mean_errors
+ai,A,T1,high_experience,gpt-6-luna,1,1,1,1.0,0,10.91,7.0,1.0,1.0
+ai,A,T1,low_digital_experience,gpt-6-luna,1,1,1,1.0,0,12.0,7.0,1.0,1.0
+ai,A,T1,low_patience,gpt-6-luna,1,1,1,1.0,0,11.0,7.0,1.0,1.0
+ai,A,T1,low_risk_tolerance,gpt-6-luna,1,1,1,1.0,0,12.0,7.0,1.0,1.0
+ai,A,T1,neutral_baseline,gpt-6-luna,3,3,1,0.3333,0,51.0,15.67,3.0,3.67
+ai,A,T5,neutral_baseline,gpt-6-luna,2,1,1,1.0,1,7.5,4.5,0.0,0.0
+human,A,T1,human_participant,unknown,1,1,1,1.0,0,53.0,3.0,2.0,2.0
+human,A,T5,human_participant,unknown,3,3,1,0.3333,0,29.0,5.0,2.33,2.33
+human,B,T1,human_participant,unknown,1,1,1,1.0,0,15.0,1.0,0.0,0.0
+human,B,T5,human_participant,unknown,1,1,1,1.0,0,8.0,1.0,0.0,0.0
