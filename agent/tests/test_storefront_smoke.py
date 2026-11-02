@@ -38,6 +38,7 @@ def test_rendered_t1_and_t5_start_states_reset_consistently():
         assert page.get_by_test_id("quantity-book-1").inner_text() == "1"
         page_inspection = agent_browser.inspect_page()
         assert "BehaviourLens" in page_inspection["visible_text"]
+        assert "Add Signal in the Dust to cart" in page_inspection["buttons"]
         assert agent_browser.verify_task_state("T5", "book-1")["success"] is False
         initial_subtotal = float(page.get_by_test_id("cart-total").inner_text().replace("$", ""))
 
@@ -59,9 +60,18 @@ def test_rendered_t1_and_t5_start_states_reset_consistently():
         assert page.get_by_placeholder("Title or author").input_value() == ""
         assert page.locator('[data-testid="cart-panel"] .cart-item').count() == 0
         page.get_by_label("Search books by title or author").fill("Signal in the Dust")
-        page.get_by_role("button", name="Add Signal in the Dust to cart", exact=True).click()
+        click_result = agent_browser.click_element("button", "Add Signal in the Dust to cart")
+        assert click_result["ok"] is True
         assert page.locator('[data-testid="cart-panel"] .cart-item').get_attribute("data-product-id") == "book-2"
         assert agent_browser.verify_task_state("T1", "book-2")["success"] is True
+
+        page.goto(
+            f"{APP_URL}/?task=T5&version=A&session_id=ai-session-test&actor=ai",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_test_id("cart-panel").wait_for(state="visible", timeout=10000)
+        assert page.get_by_test_id("quantity-book-1").inner_text() == "1"
+        assert page.get_by_role("button", name="Verify final cart", exact=True).count() == 0
         context.close()
         browser.close()
 

@@ -56,7 +56,7 @@ class LocalBrowser:
         self._count_action()
         try:
             body_text = self.page.locator("body").inner_text(timeout=5000)
-            controls = self.page.get_by_role("button").all_text_contents()
+            buttons = self.page.get_by_role("button").all()
             headings = self.page.get_by_role("heading").all_text_contents()
             inputs = self.page.get_by_role("textbox").all()
             selects = self.page.get_by_role("combobox").all()
@@ -64,7 +64,10 @@ class LocalBrowser:
                 "url": self.page.url,
                 "title": self.page.title(),
                 "headings": headings[:40],
-                "buttons": [text.strip() for text in controls if text.strip()][:80],
+                "buttons": [
+                    button.get_attribute("aria-label") or button.inner_text().strip()
+                    for button in buttons[:80]
+                ],
                 "textboxes": [
                     {
                         "label": item.get_attribute("aria-label") or item.get_attribute("placeholder") or "",

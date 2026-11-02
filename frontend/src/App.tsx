@@ -701,10 +701,12 @@ function App() {
               <span>Subtotal</span>
               <strong data-testid="cart-total">{currency(cartTotal)}</strong>
             </div>
-            <button type="button" className="verify-task-button" onClick={verifyTask} disabled={!sessionId}>
-              Verify final cart
-            </button>
-            {taskVerified ? <output className="verified-state">Task outcome verified from the cart.</output> : null}
+            {!isAgentSession ? <>
+              <button type="button" className="verify-task-button" onClick={verifyTask} disabled={!sessionId}>
+                Verify final cart
+              </button>
+              {taskVerified ? <output className="verified-state">Task outcome verified from the cart.</output> : null}
+            </> : null}
           </div>
 
           <div className="panel-section delivery-panel">

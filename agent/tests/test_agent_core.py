@@ -77,6 +77,23 @@ def test_report_generation_exports_observed_runs_and_human_sessions(monkeypatch)
                     "retries": 0,
                     "errors": 0,
                     "cart": [{"product_id": "book-2", "quantity": 1}],
+                },
+                {
+                    "session_id": "prior-ai-session",
+                    "actor_type": "ai",
+                    "persona": "low_patience",
+                    "model_name": "test-model",
+                    "version": "A",
+                    "task_id": "T1",
+                    "status": "completed",
+                    "success": True,
+                    "duration_seconds": 6,
+                    "event_count": 5,
+                    "actions": 4,
+                    "retries": 1,
+                    "errors": 0,
+                    "failed_attempts": 0,
+                    "cart": [{"product_id": "book-2", "quantity": 1}],
                 }
             ],
         ),
@@ -100,7 +117,11 @@ def test_report_generation_exports_observed_runs_and_human_sessions(monkeypatch)
         content = paths[2].read_text(encoding="utf-8")
         assert "ai-run" in content
         assert "human-session" in content
+        assert "prior-ai-session" in content
         summary = paths[0].read_text(encoding="utf-8")
         assert "Preliminary" in summary
         assert "Version B" in summary
         assert "Human/AI actor comparison" in summary
+        assert "low_patience" in summary
+        assert "neutral_baseline" in summary
+        assert "AI sessions in stored results: 2" in summary

@@ -25,6 +25,9 @@ def run_browser_agent(
     instructions = (
         "You are participating in a controlled local bookstore usability study. "
         "Complete the task by interacting with the rendered website using only the supplied browser tools. "
+        "Use the exact accessible names reported by inspect_page when clicking. "
+        "After changing search or filters, inspect the visible results before repeating an action. "
+        "Do not repeat an action when the visible page already reflects it. "
         "Do not claim success without inspecting the final cart. Do not use any external website. "
         f"Interaction-style configuration: {persona.strategy_guidance} "
         f"Decision style: {persona.decision_style}. Retry limit: {persona.retry_limit}. "
