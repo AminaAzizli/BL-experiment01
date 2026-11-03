@@ -1,6 +1,6 @@
-# BehaviourLens
+# Usability Experiment
 
-BehaviourLens is a local proof-of-concept for observing how people and AI browser agents use the same controlled bookstore. It compares Version A's selected usability friction with Version B's improvements and records browser behavior for T1 product discovery and T5 cart editing.
+Usability experimnt is a local proof-of-concept for observing how people and AI browser agents use the same controlled bookstore. It compares Version A's selected usability friction with Version B's improvements and records browser behavior for T1 product discovery and T5 cart editing.
 
 ## What this mini-experiment tests
 
